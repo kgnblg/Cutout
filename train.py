@@ -1,9 +1,6 @@
-# run train.py --dataset cifar10 --model resnet18 --data_augmentation --cutout --length 16
-# run train.py --dataset cifar100 --model resnet18 --data_augmentation --cutout --length 8
-# run train.py --dataset svhn --model wideresnet --learning_rate 0.01 --epochs 160 --cutout --length 20
-
 import pdb
 import argparse
+import os
 import numpy as np
 from tqdm import tqdm
 
@@ -15,6 +12,12 @@ from torch.optim.lr_scheduler import MultiStepLR
 
 from torchvision.utils import make_grid
 from torchvision import datasets, transforms
+from torchvision.transforms import ToPILImage
+
+import matplotlib.pyplot as plt
+from PIL import Image
+
+from torchvision.transforms.functional import to_pil_image
 
 from util.misc import CSVLogger
 from util.cutout import Cutout
@@ -44,10 +47,15 @@ parser.add_argument('--n_holes', type=int, default=1,
                     help='number of holes to cut out from image')
 parser.add_argument('--length', type=int, default=16,
                     help='length of the holes')
+parser.add_argument('--shape', type=str, default='rectangle',
+                    choices=['rectangle', 'triangle', 'circle', 'star'],
+                    help='shape of the cutout patches')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
 parser.add_argument('--seed', type=int, default=0,
                     help='random seed (default: 1)')
+parser.add_argument('--preview', action='store_true', default=False,
+                    help='show preview of cutout augmentation')
 
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
@@ -63,7 +71,7 @@ print(args)
 
 # Image Preprocessing
 if args.dataset == 'svhn':
-    normalize = transforms.Normalize(mean=[x / 255.0 for x in[109.9, 109.7, 113.8]],
+    normalize = transforms.Normalize(mean=[x / 255.0 for x in [109.9, 109.7, 113.8]],
                                      std=[x / 255.0 for x in [50.1, 50.6, 50.8]])
 else:
     normalize = transforms.Normalize(mean=[x / 255.0 for x in [125.3, 123.0, 113.9]],
@@ -76,8 +84,7 @@ if args.data_augmentation:
 train_transform.transforms.append(transforms.ToTensor())
 train_transform.transforms.append(normalize)
 if args.cutout:
-    train_transform.transforms.append(Cutout(n_holes=args.n_holes, length=args.length))
-
+    train_transform.transforms.append(Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape))
 
 test_transform = transforms.Compose([
     transforms.ToTensor(),
@@ -165,6 +172,75 @@ filename = 'logs/' + test_id + '.csv'
 csv_logger = CSVLogger(args=args, fieldnames=['epoch', 'train_acc', 'test_acc'], filename=filename)
 
 
+def show_preview():
+    # Load an image from the dataset
+    img, _ = train_dataset[0]
+
+    # Convert tensor to PIL image for displaying
+    transform_to_pil = transforms.ToPILImage()
+    img_before = transform_to_pil(img)
+    plt.imshow(img_before)
+    plt.show()
+
+    plt.imshow(img_before)
+    plt.axis('off')  # Hide axes for a cleaner look
+    plt.show()
+
+    # plt.imshow(img_before)
+    # plt.show()
+
+    # Apply the Cutout transformation
+    cutout = Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape)
+    img_cutout_tensor = cutout(img)
+
+    # Convert tensor back to PIL image
+    img_after = transform_to_pil(img_cutout_tensor)
+
+    # Display before and after images
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    
+    axes[0].imshow(img_before)
+    axes[0].set_title("Before")
+    axes[0].axis('off')
+
+    axes[1].imshow(img_after)
+    axes[1].set_title("After")
+    axes[1].axis('off')
+
+    plt.show()
+
+import os
+from torchvision.transforms import ToPILImage
+
+def save_preview(output_dir='previews'):
+    # Ensure the output directory exists
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Load an image from the dataset
+    img, _ = train_dataset[0]
+
+    # Convert tensor to PIL image for saving
+    transform_to_pil = ToPILImage()
+    img_before = transform_to_pil(img)
+
+    # Apply the Cutout transformation
+    cutout = Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape)
+    img_cutout_tensor = cutout(img)
+
+    # Convert tensor back to PIL image
+    img_after = transform_to_pil(img_cutout_tensor)
+
+    # Define file paths
+    before_path = os.path.join(output_dir, 'img_before.png')
+    after_path = os.path.join(output_dir, 'img_after.png')
+
+    # Save images to the output directory
+    img_before.save(before_path)
+    img_after.save(after_path)
+
+    print(f'Images saved to {output_dir}')
+
 def test(loader):
     cnn.eval()    # Change model to 'eval' mode (BN uses moving mean/var).
     correct = 0.
@@ -185,46 +261,49 @@ def test(loader):
     return val_acc
 
 
-for epoch in range(args.epochs):
+if args.preview:
+    show_preview()
+    save_preview()
+else:
+    for epoch in range(args.epochs):
 
-    xentropy_loss_avg = 0.
-    correct = 0.
-    total = 0.
+        xentropy_loss_avg = 0.
+        correct = 0.
+        total = 0.
 
-    progress_bar = tqdm(train_loader)
-    for i, (images, labels) in enumerate(progress_bar):
-        progress_bar.set_description('Epoch ' + str(epoch))
+        progress_bar = tqdm(train_loader)
+        for i, (images, labels) in enumerate(progress_bar):
+            progress_bar.set_description('Epoch ' + str(epoch))
 
-        images = images.cuda()
-        labels = labels.cuda()
+            images = images.cuda()
+            labels = labels.cuda()
 
-        cnn.zero_grad()
-        pred = cnn(images)
+            cnn.zero_grad()
+            pred = cnn(images)
 
-        xentropy_loss = criterion(pred, labels)
-        xentropy_loss.backward()
-        cnn_optimizer.step()
+            xentropy_loss = criterion(pred, labels)
+            xentropy_loss.backward()
+            cnn_optimizer.step()
 
-        xentropy_loss_avg += xentropy_loss.item()
+            xentropy_loss_avg += xentropy_loss.item()
 
-        # Calculate running average of accuracy
-        pred = torch.max(pred.data, 1)[1]
-        total += labels.size(0)
-        correct += (pred == labels.data).sum().item()
-        accuracy = correct / total
+            # Calculate running average of accuracy
+            pred = torch.max(pred.data, 1)[1]
+            total += labels.size(0)
+            correct += (pred == labels.data).sum().item()
+            accuracy = correct / total
 
-        progress_bar.set_postfix(
-            xentropy='%.3f' % (xentropy_loss_avg / (i + 1)),
-            acc='%.3f' % accuracy)
+            progress_bar.set_postfix(
+                xentropy='%.3f' % (xentropy_loss_avg / (i + 1)),
+                acc='%.3f' % accuracy)
 
-    test_acc = test(test_loader)
-    tqdm.write('test_acc: %.3f' % (test_acc))
+        test_acc = test(test_loader)
+        tqdm.write('test_acc: %.3f' % (test_acc))
 
-    scheduler.step(epoch)  # Use this line for PyTorch <1.4
-    # scheduler.step()     # Use this line for PyTorch >=1.4
+        scheduler.step(epoch)  # Use this line for PyTorch <1.4
+        # scheduler.step()
+        row = {'epoch': str(epoch), 'train_acc': str(accuracy), 'test_acc': str(test_acc)}
+        csv_logger.writerow(row)
 
-    row = {'epoch': str(epoch), 'train_acc': str(accuracy), 'test_acc': str(test_acc)}
-    csv_logger.writerow(row)
-
-torch.save(cnn.state_dict(), 'checkpoints/' + test_id + '.pt')
-csv_logger.close()
+    torch.save(cnn.state_dict(), 'checkpoints/' + test_id + '.pt')
+    csv_logger.close()
