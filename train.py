@@ -48,7 +48,7 @@ parser.add_argument('--n_holes', type=int, default=1,
 parser.add_argument('--length', type=int, default=16,
                     help='length of the holes')
 parser.add_argument('--shape', type=str, default='rectangle',
-                    choices=['rectangle', 'triangle', 'circle', 'star'],
+                    choices=['triangle', 'circle', 'star', 'ellipse'],
                     help='shape of the cutout patches')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
@@ -83,7 +83,7 @@ if args.data_augmentation:
     train_transform.transforms.append(transforms.RandomHorizontalFlip())
 train_transform.transforms.append(transforms.ToTensor())
 train_transform.transforms.append(normalize)
-if args.cutout:
+if args.cutout and not args.preview:
     train_transform.transforms.append(Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape))
 
 test_transform = transforms.Compose([
@@ -173,44 +173,41 @@ csv_logger = CSVLogger(args=args, fieldnames=['epoch', 'train_acc', 'test_acc'],
 
 
 def show_preview():
-    # Load an image from the dataset
+    # # Load an image from the dataset
     img, _ = train_dataset[0]
 
-    # Convert tensor to PIL image for displaying
-    transform_to_pil = transforms.ToPILImage()
-    img_before = transform_to_pil(img)
-    plt.imshow(img_before)
-    plt.show()
-
-    plt.imshow(img_before)
-    plt.axis('off')  # Hide axes for a cleaner look
-    plt.show()
-
+    # # Convert tensor to PIL image for displaying
+    # transform_to_pil = transforms.ToPILImage()
+    # img_before = transform_to_pil(img)
     # plt.imshow(img_before)
     # plt.show()
 
-    # Apply the Cutout transformation
-    cutout = Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape)
-    img_cutout_tensor = cutout(img)
+    # plt.imshow(img_before)
+    # plt.axis('off')  # Hide axes for a cleaner look
+    # plt.show()
 
-    # Convert tensor back to PIL image
-    img_after = transform_to_pil(img_cutout_tensor)
+    # # plt.imshow(img_before)
+    # # plt.show()
 
-    # Display before and after images
-    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    # # Apply the Cutout transformation
+    # cutout = Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape)
+    # img_cutout_tensor = cutout(img)
+
+    # # Convert tensor back to PIL image
+    # img_after = transform_to_pil(img_cutout_tensor)
+
+    # # Display before and after images
+    # fig, axes = plt.subplots(1, 2, figsize=(12, 6))
     
-    axes[0].imshow(img_before)
-    axes[0].set_title("Before")
-    axes[0].axis('off')
+    # axes[0].imshow(img_before)
+    # axes[0].set_title("Before")
+    # axes[0].axis('off')
 
-    axes[1].imshow(img_after)
-    axes[1].set_title("After")
-    axes[1].axis('off')
+    # axes[1].imshow(img_after)
+    # axes[1].set_title("After")
+    # axes[1].axis('off')
 
-    plt.show()
-
-import os
-from torchvision.transforms import ToPILImage
+    # plt.show()
 
 def save_preview(output_dir='previews'):
     # Ensure the output directory exists
@@ -218,11 +215,15 @@ def save_preview(output_dir='previews'):
         os.makedirs(output_dir)
 
     # Load an image from the dataset
-    img, _ = train_dataset[0]
+    img, _ = train_dataset[5]
 
     # Convert tensor to PIL image for saving
     transform_to_pil = ToPILImage()
-    img_before = transform_to_pil(img)
+    img_beforeee = transform_to_pil(img)
+
+    # Save the original image
+    before_path = os.path.join(output_dir, 'img_before.png')
+    img_beforeee.save(before_path)
 
     # Apply the Cutout transformation
     cutout = Cutout(n_holes=args.n_holes, length=args.length, shape=args.shape)
@@ -231,15 +232,12 @@ def save_preview(output_dir='previews'):
     # Convert tensor back to PIL image
     img_after = transform_to_pil(img_cutout_tensor)
 
-    # Define file paths
-    before_path = os.path.join(output_dir, 'img_before.png')
+    # Save the image after Cutout transformation
     after_path = os.path.join(output_dir, 'img_after.png')
-
-    # Save images to the output directory
-    img_before.save(before_path)
     img_after.save(after_path)
 
     print(f'Images saved to {output_dir}')
+
 
 def test(loader):
     cnn.eval()    # Change model to 'eval' mode (BN uses moving mean/var).
@@ -262,7 +260,6 @@ def test(loader):
 
 
 if args.preview:
-    show_preview()
     save_preview()
 else:
     for epoch in range(args.epochs):
