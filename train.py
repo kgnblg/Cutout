@@ -48,7 +48,7 @@ parser.add_argument('--n_holes', type=int, default=1,
 parser.add_argument('--length', type=int, default=16,
                     help='length of the holes')
 parser.add_argument('--shape', type=str, default='rectangle',
-                    choices=['triangle', 'circle', 'star', 'ellipse'],
+                    choices=['triangle', 'circle', 'random', 'ellipse'],
                     help='shape of the cutout patches')
 parser.add_argument('--no-cuda', action='store_true', default=False,
                     help='enables CUDA training')
