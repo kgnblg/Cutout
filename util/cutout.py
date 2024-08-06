@@ -9,7 +9,7 @@ class Cutout(object):
     Args:
         n_holes (int): Number of patches to cut out of each image.
         length (int): The length (in pixels) of each side of the shape.
-        shape (str): Shape of the patches to cut out ('triangle', 'circle', 'star').
+        shape (str): Shape of the patches to cut out ('triangle', 'circle', 'ellipse').
     """
     def __init__(self, n_holes, length, shape='triangle'):
         self.n_holes = n_holes
@@ -28,6 +28,12 @@ class Cutout(object):
 
         mask = np.ones((h, w), np.float32)
 
+        shapes = ['triangle', 'circle', 'ellipse']
+        if self.shape == 'random':
+            self.shape = np.random.choice(shapes)
+        elif self.shape not in shapes:
+            raise ValueError(f"Shape must be one of {shapes}. Got {self.shape}.")
+
         for n in range(self.n_holes):
             y = np.random.randint(h)
             x = np.random.randint(w)
@@ -42,28 +48,9 @@ class Cutout(object):
             elif self.shape == 'circle':
                 radius = self.length // 2
                 cv2.circle(mask, (x, y), radius, 0, -1)
-            elif self.shape == 'star':
-                # Create a star mask with the size of the image
-                star_mask = np.ones((h, w), np.float32)
-                star_img = Image.new('L', (self.length, self.length), 0)
-                draw = ImageDraw.Draw(star_img)
-                draw.regular_polygon((self.length // 2, self.length // 2, self.length // 2), 5, fill=255)
-                star_np = np.array(star_img)
-
-                # Define the bounding box for the star mask
-                y1 = max(0, y - self.length // 2)
-                y2 = min(h, y + self.length // 2)
-                x1 = max(0, x - self.length // 2)
-                x2 = min(w, x + self.length // 2)
-
-                # Place the star in the mask
-                star_x1 = max(0, self.length // 2 - x)
-                star_x2 = star_x1 + (x2 - x1)
-                star_y1 = max(0, self.length // 2 - y)
-                star_y2 = star_y1 + (y2 - y1)
-
-                # Update the mask with the star shape
-                star_mask[y1:y2, x1:x2] = np.clip(star_mask[y1:y2, x1:x2] - star_np[star_y1:star_y2, star_x1:star_x2], 0, 1)
+            elif self.shape == 'ellipse':
+                axes = (self.length // 2, self.length // 4)  # Major and minor axes
+                cv2.ellipse(mask, (x, y), axes, 0, 0, 360, 0, -1)
 
         mask = torch.from_numpy(mask)
         mask = mask.expand_as(img)
